@@ -1,20 +1,22 @@
-package example
+package wstest
 
 import (
 	"testing"
 
 	"fmt"
-	"github.com/posener/wstest"
+	"github.com/gorilla/websocket"
+	"log"
+	"net/http"
 )
 
-// TestExample demonstrate the usage of wstest package
-func TestExample(t *testing.T) {
+// TestClient demonstrate the usage of wstest package
+func TestClient(t *testing.T) {
 	var (
 		// simple echo server that returns everything it receives on a websocket
 		server = newEchoServer()
 
 		// create a new websocket test client
-		client = wstest.NewClient()
+		client = NewClient()
 	)
 
 	// first connect to server.
@@ -31,7 +33,7 @@ func TestExample(t *testing.T) {
 		msg := fmt.Sprintf("hello, world! %d", i)
 
 		// send a message in the websocket
-		client.Send(wstest.NewTextMessage([]byte(msg)))
+		client.Send(NewTextMessage([]byte(msg)))
 
 		// receive a message from the websocket
 		received, err := client.Receive()
@@ -51,4 +53,47 @@ func TestExample(t *testing.T) {
 	// after the client have closed the connection, the server's connection handling
 	// thread should also break. (this is specific for the echo server implementation)
 	<-server.Wait()
+}
+
+type echoServer struct {
+	upgrader websocket.Upgrader
+	done     chan struct{}
+}
+
+func newEchoServer() *echoServer {
+	return &echoServer{
+		done: make(chan struct{}),
+	}
+}
+
+func (s *echoServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	var err error
+	defer close(s.done)
+
+	conn, err := s.upgrader.Upgrade(w, r, nil)
+	defer conn.Close()
+	if err != nil {
+		panic(err)
+	}
+
+	for r.Context().Err() == nil {
+
+		mType, m, err := conn.ReadMessage()
+		if err != nil {
+			log.Println("failed read:", err)
+			return
+		}
+
+		log.Println("server echo:", string(m))
+
+		err = conn.WriteMessage(mType, m)
+		if err != nil {
+			log.Println("failed write:", err)
+			return
+		}
+	}
+}
+
+func (s *echoServer) Wait() <-chan struct{} {
+	return s.done
 }
