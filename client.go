@@ -29,12 +29,16 @@ func NewClient() *Client {
 }
 
 // Connect a wstest Client to an http.Handler which accepts websocket upgrades.
+// This send an HTTP request to the http.Handler, and wait for the connection upgrade response.
+// it uses the gorilla's websocket.Dial function, over a fake net.Conn struct.
+// it runs the server's ServeHTTP function in a goroutine, so server can communicate with a
+// client running on the current program flow
 func (c *Client) Connect(h http.Handler) error {
 
-	// run the dialerHandle in a goroutine, so when the Dial send the request to
+	// run the runServer in a goroutine, so when the Dial send the request to
 	// the server on the connection, it will be parsed as an HTTPRequest and
 	// sent to the Handler function.
-	go c.dialerHandle(h)
+	go c.runServer(h)
 
 	// use the websocket.Dialer.Dial with the fake net.Conn to communicate with
 	// the server
@@ -50,7 +54,7 @@ func (c *Client) Connect(h http.Handler) error {
 // dialer handler reads the request sent on the connection to the server
 // from the websocket.Dialer.Dial function, and pass it to the server.
 // once this is done, the communication is done on the wsConn
-func (c *Client) dialerHandle(h http.Handler) {
+func (c *Client) runServer(h http.Handler) {
 	req, err := http.ReadRequest(bufio.NewReader(c.sConn))
 	if err != nil {
 		panic(err)
