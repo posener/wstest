@@ -24,7 +24,7 @@ func TestClient(t *testing.T) {
 	// it uses the gorilla's websocket.Dial function, over a fake net.Conn struct.
 	// it runs the server's ServeHTTP function in a goroutine, so server can communicate with a
 	// client running on the current program flow
-	err := client.Connect(server)
+	err := client.Connect(server, "ws://example.org/ws")
 	if err != nil {
 		t.Fatalf("Failed connecting to echoServer: %server", err)
 	}

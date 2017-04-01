@@ -33,7 +33,10 @@ func NewClient() *Client {
 // it uses the gorilla's websocket.Dial function, over a fake net.Conn struct.
 // it runs the server's ServeHTTP function in a goroutine, so server can communicate with a
 // client running on the current program flow
-func (c *Client) Connect(h http.Handler) error {
+// h is the handler that should handle websocket connections.
+// url is the url to connect to that handler. the host and port are not important, but protocol
+// should be ws or wss, and the path should be the one that expects websocket connections
+func (c *Client) Connect(h http.Handler, url string) error {
 
 	// run the runServer in a goroutine, so when the Dial send the request to
 	// the server on the connection, it will be parsed as an HTTPRequest and
@@ -43,7 +46,7 @@ func (c *Client) Connect(h http.Handler) error {
 	// use the websocket.Dialer.Dial with the fake net.Conn to communicate with
 	// the server
 	dialer := websocket.Dialer{NetDial: func(network, addr string) (net.Conn, error) { return c.cConn, nil }}
-	wsConn, _, err := dialer.Dial("ws://ws", nil)
+	wsConn, _, err := dialer.Dial(url, nil)
 	if err != nil {
 		return err
 	}
