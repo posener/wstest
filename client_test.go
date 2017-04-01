@@ -1,99 +1,100 @@
 package wstest
 
 import (
+	"fmt"
+	"net/http"
 	"testing"
 
-	"fmt"
 	"github.com/gorilla/websocket"
-	"log"
-	"net/http"
 )
 
 // TestClient demonstrate the usage of wstest package
 func TestClient(t *testing.T) {
 	var (
-		// simple echo server that returns everything it receives on a websocket
-		server = newEchoServer()
+		// simple server
+		s = &server{}
 
 		// create a new websocket test client
-		client = NewClient()
+		c = NewClient(10)
 	)
 
-	// first connect to server.
+	defer c.Close()
+	defer s.Close()
+
+	// first connect to s.
 	// this send an HTTP request to the http.Handler, and wait for the connection upgrade response.
 	// it uses the gorilla's websocket.Dial function, over a fake net.Conn struct.
-	// it runs the server's ServeHTTP function in a goroutine, so server can communicate with a
-	// client running on the current program flow
-	err := client.Connect(server, "ws://example.org/ws")
+	// it runs the s's ServeHTTP function in a goroutine, so s can communicate with a
+	// c running on the current program flow
+	err := c.Connect(s, "ws://example.org/ws")
 	if err != nil {
-		t.Fatalf("Failed connecting to echoServer: %server", err)
+		t.Fatalf("Failed connecting to s: %s", err)
 	}
 
 	for i := 0; i < 10; i++ {
 		msg := fmt.Sprintf("hello, world! %d", i)
+		var m *Message
 
 		// send a message in the websocket
-		client.Send(NewTextMessage([]byte(msg)))
+		c.Send(NewTextMessage([]byte(msg)))
 
-		// receive a message from the websocket
-		received, err := client.Receive()
+		m, err = s.Receive()
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		// check if the echo server returned the same message
-		if want, got := msg, string(received.Data); want != got {
-			t.Errorf("Failed echoing: %s != %s", want, got)
+		if want, got := msg, string(m.Data); want != got {
+			t.Errorf("Failed sending to server: %s != %s", want, got)
+		}
+
+		s.Send(NewTextMessage([]byte(msg)))
+
+		m, err = c.Receive()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if want, got := msg, string(m.Data); want != got {
+			t.Errorf("Failed sending to server: %s != %s", want, got)
 		}
 	}
-
-	// close the client side of the weboscket connection.
-	client.Close()
-
-	// after the client have closed the connection, the server's connection handling
-	// thread should also break. (this is specific for the echo server implementation)
-	<-server.Wait()
 }
 
-type echoServer struct {
+type server struct {
 	upgrader websocket.Upgrader
-	done     chan struct{}
+	conn     *websocket.Conn
 }
 
-func newEchoServer() *echoServer {
-	return &echoServer{
-		done: make(chan struct{}),
-	}
-}
-
-func (s *echoServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var err error
-	defer close(s.done)
 
-	conn, err := s.upgrader.Upgrade(w, r, nil)
-	defer conn.Close()
+	if r.URL.Path != "/ws" {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	s.conn, err = s.upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		panic(err)
 	}
-
-	for r.Context().Err() == nil {
-
-		mType, m, err := conn.ReadMessage()
-		if err != nil {
-			log.Println("failed read:", err)
-			return
-		}
-
-		log.Println("server echo:", string(m))
-
-		err = conn.WriteMessage(mType, m)
-		if err != nil {
-			log.Println("failed write:", err)
-			return
-		}
-	}
 }
 
-func (s *echoServer) Wait() <-chan struct{} {
-	return s.done
+func (s *server) Receive() (*Message, error) {
+	mType, data, err := s.conn.ReadMessage()
+	if err != nil {
+		return nil, err
+	}
+	return &Message{mType, data}, nil
+}
+
+func (s *server) Send(m *Message) error {
+	err := s.conn.WriteMessage(m.Type, m.Data)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *server) Close() error {
+	return s.conn.Close()
 }

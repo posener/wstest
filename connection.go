@@ -16,10 +16,10 @@ type conn struct {
 // newConnPair returns two connections, paired by channels.
 // any message written into the first will be read in the second
 // and vice-versa.
-func newConnPair() (server, client net.Conn) {
+func newConnPair(connCapacity int) (server, client net.Conn) {
 	var (
-		s2c   = make(chan []byte)
-		c2s   = make(chan []byte)
+		s2c   = make(chan []byte, connCapacity)
+		c2s   = make(chan []byte, connCapacity)
 		cAddr = &address{"tcp", "127.0.0.1:12345"}
 		sAddr = &address{"tcp", "8.8.8.8:12346"}
 	)

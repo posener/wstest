@@ -18,8 +18,10 @@ type Client struct {
 }
 
 // NewClient returns a new client
-func NewClient() *Client {
-	sConn, cConn := newConnPair()
+// connCapacity is the amount of messages allowed to be passed between the server to the client or
+// the client to server without being received in the other side.
+func NewClient(connCapacity int) *Client {
+	sConn, cConn := newConnPair(connCapacity)
 	return &Client{
 		sConn: sConn,
 		cConn: cConn,
@@ -41,9 +43,8 @@ func (c *Client) Connect(h http.Handler, url string) error {
 	// sent to the Handler function.
 	go c.runServer(h)
 
-	// use the websocket.Dialer.Dial with the fake net.Conn to communicate with
-	// the server
-	dialer := websocket.Dialer{NetDial: func(network, addr string) (net.Conn, error) { return c.cConn, nil }}
+	// use the websocket.Dialer.Dial with the fake net.Conn to communicate with the server
+	dialer := &websocket.Dialer{NetDial: func(network, addr string) (net.Conn, error) { return c.cConn, nil }}
 	wsConn, _, err := dialer.Dial(url, nil)
 	if err != nil {
 		return err
