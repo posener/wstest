@@ -7,10 +7,11 @@ import (
 
 // conn is a connection for testing, implementing the net.Conn interface
 type conn struct {
-	in     <-chan []byte
-	out    chan<- []byte
-	local  net.Addr
-	remote net.Addr
+	in      <-chan []byte
+	out     chan<- []byte
+	local   net.Addr
+	remote  net.Addr
+	readBuf []byte
 }
 
 // newConnPair returns two connections, paired by channels.
@@ -30,8 +31,11 @@ func newConnPair(connCapacity int) (server, client net.Conn) {
 }
 
 func (c *conn) Read(b []byte) (n int, err error) {
-	read := <-c.in
-	n = copy(b, read)
+	if len(c.readBuf) == 0 {
+		c.readBuf = <-c.in
+	}
+	n = copy(b, c.readBuf)
+	c.readBuf = c.readBuf[n:]
 	return
 }
 
