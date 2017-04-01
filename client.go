@@ -2,7 +2,6 @@ package wstest
 
 import (
 	"bufio"
-	"errors"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -13,10 +12,9 @@ import (
 // Client is a websocket client for unit testing
 type Client struct {
 	httptest.ResponseRecorder
-	sConn    net.Conn
-	cConn    net.Conn
-	wsConn   *websocket.Conn
-	hijacked bool
+	sConn  net.Conn
+	cConn  net.Conn
+	wsConn *websocket.Conn
 }
 
 // NewClient returns a new client
@@ -86,12 +84,6 @@ func (c *Client) Close() error {
 
 // Hijack the connection
 func (c *Client) Hijack() (net.Conn, *bufio.ReadWriter, error) {
-
 	rw := bufio.NewReadWriter(bufio.NewReader(c.sConn), bufio.NewWriter(c.sConn))
-
-	if c.hijacked {
-		return nil, nil, errors.New("already hijacked")
-	}
-	c.hijacked = true
 	return c.sConn, rw, nil
 }
