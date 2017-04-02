@@ -2,7 +2,6 @@ package wstest
 
 import (
 	"io"
-	"log"
 	"net"
 	"time"
 )
@@ -15,14 +14,14 @@ type conn struct {
 	local  net.Addr
 	remote net.Addr
 
-	// set Log to a logger in order to print debug information of the connection
-	Log *log.Logger
+	// set Log to a Println function in order to print debug information of the connection
+	Log func(v ...interface{})
 }
 
 // newConnPair returns two connections, paired by channels.
 // any message written into the first will be read in the second
 // and vice-versa.
-func newConnPair() (server, client net.Conn) {
+func newConnPair() (server, client *conn) {
 	var (
 		s2c   = newBuffer()
 		c2s   = newBuffer()
@@ -46,12 +45,12 @@ func (c *conn) Read(b []byte) (n int, err error) {
 
 		// nothing to read, wait for a signal from the other side writer
 		if c.Log != nil {
-			c.Log.Println(c.name, "waiting read")
+			c.Log(c.name, "waiting read")
 		}
 		c.in.Wait()
 	}
 	if c.Log != nil {
-		c.Log.Println(c.name, err, "<", string(b[:n]))
+		c.Log(c.name, err, "<", string(b[:n]))
 	}
 	return
 }
@@ -62,7 +61,7 @@ func (c *conn) Write(b []byte) (n int, err error) {
 
 	n, err = c.out.Write(b)
 	if c.Log != nil {
-		c.Log.Println(c.name, err, ">", string(b[:n]))
+		c.Log(c.name, err, ">", string(b[:n]))
 	}
 
 	// signal other side reader for new content in buffer

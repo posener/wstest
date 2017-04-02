@@ -89,6 +89,7 @@ func TestConcurrent(t *testing.T) {
 		s = &server{Upgraded: make(chan struct{})}
 		c = NewClient()
 	)
+	c.SetLogger(t.Log)
 
 	err := c.Connect(s, "ws://example.org/ws")
 	if err != nil {

@@ -13,8 +13,8 @@ import (
 type Client struct {
 	httptest.ResponseRecorder
 	*websocket.Conn
-	sConn net.Conn
-	cConn net.Conn
+	sConn *conn
+	cConn *conn
 }
 
 // NewClient returns a new client
@@ -24,6 +24,13 @@ func NewClient() *Client {
 		sConn: sConn,
 		cConn: cConn,
 	}
+}
+
+// Set debug logging for the client and connections
+// log is a Println-like function
+func (c *Client) SetLogger(log func(...interface{})) {
+	c.sConn.Log = log
+	c.cConn.Log = log
 }
 
 // Connect a wstest Client to an http.Handler which accepts websocket upgrades.
