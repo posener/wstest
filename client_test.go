@@ -8,6 +8,8 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+const count = 100
+
 // TestClient demonstrate the usage of wstest package
 func TestClient(t *testing.T) {
 	t.Parallel()
@@ -31,7 +33,7 @@ func TestClient(t *testing.T) {
 
 	<-s.Upgraded
 
-	for i := 0; i < 10; i++ {
+	for i := 0; i < count; i++ {
 		msg := fmt.Sprintf("hello, world! %d", i)
 
 		// send a message in the websocket
@@ -84,7 +86,6 @@ func TestClient(t *testing.T) {
 // TestConcurrent tests concurrent reads and writes from a connection
 func TestConcurrent(t *testing.T) {
 	t.Parallel()
-	const count = 1000
 	var (
 		s = &server{Upgraded: make(chan struct{})}
 		c = NewClient()
