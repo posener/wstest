@@ -10,16 +10,14 @@ import (
 
 // TestClient demonstrate the usage of wstest package
 func TestClient(t *testing.T) {
+	t.Parallel()
 	var (
 		// simple server
-		s = &server{}
+		s = &server{Upgraded: make(chan struct{})}
 
 		// create a new websocket test client
-		c = NewClient(10)
+		c = NewClient()
 	)
-
-	defer c.Close()
-	defer s.Close()
 
 	// first connect to s.
 	// this send an HTTP request to the http.Handler, and wait for the connection upgrade response.
@@ -31,38 +29,116 @@ func TestClient(t *testing.T) {
 		t.Fatalf("Failed connecting to s: %s", err)
 	}
 
+	<-s.Upgraded
+
 	for i := 0; i < 10; i++ {
 		msg := fmt.Sprintf("hello, world! %d", i)
-		var m *Message
 
 		// send a message in the websocket
-		c.Send(NewTextMessage([]byte(msg)))
-
-		m, err = s.Receive()
+		err := c.WriteMessage(websocket.TextMessage, []byte(msg))
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		if want, got := msg, string(m.Data); want != got {
-			t.Errorf("Failed sending to server: %s != %s", want, got)
-		}
-
-		s.Send(NewTextMessage([]byte(msg)))
-
-		m, err = c.Receive()
+		mT, m, err := s.ReadMessage()
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		if want, got := msg, string(m.Data); want != got {
-			t.Errorf("Failed sending to server: %s != %s", want, got)
+		if want, got := msg, string(m); want != got {
+			t.Errorf("server got %s, want  %s", got, want)
 		}
+		if want, got := websocket.TextMessage, mT; want != got {
+			t.Errorf("message type = %s , want %s", got, want)
+		}
+
+		s.WriteMessage(websocket.TextMessage, []byte(msg))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		mT, m, err = c.ReadMessage()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if want, got := msg, string(m); want != got {
+			t.Errorf("client got %s, want  %s", got, want)
+		}
+		if want, got := websocket.TextMessage, mT; want != got {
+			t.Errorf("message type = %s , want %s", got, want)
+		}
+	}
+
+	err = c.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = s.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestConcurrent tests concurrent reads and writes from a connection
+func TestConcurrent(t *testing.T) {
+	t.Parallel()
+	const count = 1000
+	var (
+		s = &server{Upgraded: make(chan struct{})}
+		c = NewClient()
+	)
+
+	err := c.Connect(s, "ws://example.org/ws")
+	if err != nil {
+		t.Fatalf("Failed connecting to s: %s", err)
+	}
+
+	<-s.Upgraded
+
+	// server sends messages in a goroutine
+	go func() {
+		for i := 0; i < count; i++ {
+			s.WriteJSON(i)
+		}
+	}()
+
+	received := make([]bool, count)
+
+	for i := 0; i < count; i++ {
+		var j int
+		c.ReadJSON(&j)
+
+		received[j] = true
+	}
+
+	missing := []int{}
+
+	for i := range received {
+		if !received[i] {
+			missing = append(missing, i)
+		}
+	}
+	if len(missing) > 0 {
+		t.Errorf("Did not received: %v", missing)
+	}
+
+	err = c.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = s.Close()
+	if err != nil {
+		t.Fatal(err)
 	}
 }
 
 type server struct {
+	*websocket.Conn
 	upgrader websocket.Upgrader
-	conn     *websocket.Conn
+	Upgraded chan struct{}
 }
 
 func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -73,28 +149,9 @@ func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.conn, err = s.upgrader.Upgrade(w, r, nil)
+	s.Conn, err = s.upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		panic(err)
 	}
-}
-
-func (s *server) Receive() (*Message, error) {
-	mType, data, err := s.conn.ReadMessage()
-	if err != nil {
-		return nil, err
-	}
-	return &Message{mType, data}, nil
-}
-
-func (s *server) Send(m *Message) error {
-	err := s.conn.WriteMessage(m.Type, m.Data)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (s *server) Close() error {
-	return s.conn.Close()
+	close(s.Upgraded)
 }
