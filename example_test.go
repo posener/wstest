@@ -48,18 +48,24 @@ func ExampleNewClient() {
 		panic(err)
 	}
 
+	<-s.Done
+
 	// Output: hello echo server!
 	// byebye!
 }
 
 type echoServer struct {
 	upgrader websocket.Upgrader
+	Done     chan struct{}
 }
 
 func (s *echoServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var (
 		err error
 	)
+
+	s.Done = make(chan struct{})
+	defer close(s.Done)
 
 	if r.URL.Path != "/ws" {
 		w.WriteHeader(http.StatusNotFound)
@@ -80,4 +86,5 @@ func (s *echoServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		conn.WriteJSON(msg + "!")
 	}
+
 }

@@ -19,18 +19,19 @@ type Client struct {
 
 // NewClient returns a new client
 func NewClient() *Client {
-	sConn, cConn := newConnPair()
+	sConn, cConn := newPairedConnections()
 	return &Client{
 		sConn: sConn,
 		cConn: cConn,
 	}
 }
 
-// Set debug logging for the client and connections
+// WithLogger sets debug logging for the client and connections
 // log is a Println-like function
-func (c *Client) SetLogger(log func(...interface{})) {
+func (c *Client) WithLogger(log log) *Client {
 	c.sConn.Log = log
 	c.cConn.Log = log
+	return c
 }
 
 // Connect a wstest Client to an http.Handler which accepts websocket upgrades.
@@ -77,4 +78,17 @@ func (c *Client) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	// return to the server the sConn, which is the server side of the connection
 	rw := bufio.NewReadWriter(bufio.NewReader(c.sConn), bufio.NewWriter(c.sConn))
 	return c.sConn, rw, nil
+}
+
+func (c *Client) WriteHeader(code int) {
+	r := http.Response{StatusCode: code}
+	r.Write(c.sConn)
+	c.sConn.Close()
+}
+
+func (c *Client) Close() error {
+	if c.Conn == nil {
+		return nil
+	}
+	return c.Conn.Close()
 }

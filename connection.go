@@ -1,7 +1,6 @@
 package wstest
 
 import (
-	"io"
 	"net"
 	"time"
 )
@@ -13,64 +12,35 @@ type conn struct {
 	out    *buffer
 	local  net.Addr
 	remote net.Addr
-
-	// set Log to a Println function in order to print debug information of the connection
-	Log func(v ...interface{})
+	Log    log
 }
 
-// newConnPair returns two connections, paired by buffers.
-// any message written into the first connection, will be read in the second
-// and vice-versa.
-func newConnPair() (server, client *conn) {
-	var (
-		s2c   = newBuffer()
-		c2s   = newBuffer()
-		cAddr = &address{"tcp", "127.0.0.1:12345"}
-		sAddr = &address{"tcp", "8.8.8.8:12346"}
-	)
+type log func(...interface{})
 
-	server = &conn{name: "server", in: c2s, out: s2c, local: sAddr, remote: cAddr}
-	client = &conn{name: "client", in: s2c, out: c2s, local: cAddr, remote: sAddr}
-	return
-}
-
+// Read from in buffer
 func (c *conn) Read(b []byte) (n int, err error) {
-	c.in.Lock()
-	defer c.in.Unlock()
-	for {
-		n, err = c.in.Read(b)
-		if err != io.EOF {
-			break
-		}
-
-		// nothing to read, wait for a signal from the other side writer
-		if c.Log != nil {
-			c.Log(c.name, "waiting read")
-		}
-		c.in.Wait()
-	}
-	if c.Log != nil {
-		c.Log(c.name, err, "<", string(b[:n]))
-	}
+	n, err = c.in.Read(b)
+	c.log(c.name, err, "<", string(b[:n]))
 	return
 }
 
+// Write to out buffer
 func (c *conn) Write(b []byte) (n int, err error) {
-	c.out.Lock()
-	defer c.out.Unlock()
-
 	n, err = c.out.Write(b)
-	if c.Log != nil {
-		c.Log(c.name, err, ">", string(b[:n]))
-	}
-
-	// signal other side reader for new content in buffer
-	c.out.Signal()
+	c.log(c.name, err, ">", string(b[:n]))
 	return
 }
 
+// Close the out buffer
 func (c *conn) Close() error {
-	return nil
+	return c.out.Close()
+}
+
+// log debug messages, if Log was defined
+func (c *conn) log(i ...interface{}) {
+	if c.Log != nil {
+		c.Log(i...)
+	}
 }
 
 func (c *conn) LocalAddr() net.Addr { return c.local }
