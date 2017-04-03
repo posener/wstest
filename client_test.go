@@ -8,7 +8,7 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-const count = 100
+const count = 20
 
 // TestClient demonstrate the usage of wstest package
 func TestClient(t *testing.T) {
@@ -17,6 +17,8 @@ func TestClient(t *testing.T) {
 		s = &server{Upgraded: make(chan struct{})}
 		c = NewClient()
 	)
+
+	c.SetLogger(t.Log)
 
 	err := c.Connect(s, "ws://example.org/ws")
 	if err != nil {
@@ -81,7 +83,6 @@ func TestConcurrent(t *testing.T) {
 		s = &server{Upgraded: make(chan struct{})}
 		c = NewClient()
 	)
-	c.SetLogger(t.Log)
 
 	err := c.Connect(s, "ws://example.org/ws")
 	if err != nil {
@@ -90,31 +91,32 @@ func TestConcurrent(t *testing.T) {
 
 	<-s.Upgraded
 
-	// server sends messages in a goroutine
-	go func() {
+	for _, pair := range []struct{src, dst *websocket.Conn} {{s.Conn, c.Conn}, {c.Conn, s.Conn}} {
+		go func() {
+			for i := 0; i < count; i++ {
+				pair.src.WriteJSON(i)
+			}
+		}()
+
+		received := make([]bool, count)
+
 		for i := 0; i < count; i++ {
-			s.WriteJSON(i)
+			var j int
+			pair.dst.ReadJSON(&j)
+
+			received[j] = true
 		}
-	}()
 
-	received := make([]bool, count)
+		missing := []int{}
 
-	for i := 0; i < count; i++ {
-		var j int
-		c.ReadJSON(&j)
-
-		received[j] = true
-	}
-
-	missing := []int{}
-
-	for i := range received {
-		if !received[i] {
-			missing = append(missing, i)
+		for i := range received {
+			if !received[i] {
+				missing = append(missing, i)
+			}
 		}
-	}
-	if len(missing) > 0 {
-		t.Errorf("Did not received: %v", missing)
+		if len(missing) > 0 {
+			t.Errorf("%s -> %s: Did not received: %v", pair.src, pair.dst, missing)
+		}
 	}
 
 	err = c.Close()
