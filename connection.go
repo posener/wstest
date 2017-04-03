@@ -18,8 +18,8 @@ type conn struct {
 	Log func(v ...interface{})
 }
 
-// newConnPair returns two connections, paired by channels.
-// any message written into the first will be read in the second
+// newConnPair returns two connections, paired by buffers.
+// any message written into the first connection, will be read in the second
 // and vice-versa.
 func newConnPair() (server, client *conn) {
 	var (
