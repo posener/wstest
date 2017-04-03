@@ -80,12 +80,14 @@ func (c *Client) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	return c.sConn, rw, nil
 }
 
+// WriteHeader write HTTP header to the client and closes the connection
 func (c *Client) WriteHeader(code int) {
 	r := http.Response{StatusCode: code}
 	r.Write(c.sConn)
 	c.sConn.Close()
 }
 
+// Close closes the websocket connection
 func (c *Client) Close() error {
 	if c.Conn == nil {
 		return nil

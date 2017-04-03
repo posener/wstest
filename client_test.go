@@ -157,7 +157,7 @@ func TestBadAddress(t *testing.T) {
 	}
 }
 
-// server for test porposes, can't handle multiple websocket connections concurrently
+// server for test purposes, can't handle multiple websocket connections concurrently
 type server struct {
 	*websocket.Conn
 	upgrader websocket.Upgrader
