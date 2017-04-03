@@ -22,4 +22,4 @@ the connection and start a websocket session, without starting the server.
 
 ## Example
 
-See [the example](./client_test.go).
+See [the example](./example_test.go).

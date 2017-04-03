@@ -14,18 +14,10 @@ const count = 100
 func TestClient(t *testing.T) {
 	t.Parallel()
 	var (
-		// simple server
 		s = &server{Upgraded: make(chan struct{})}
-
-		// create a new websocket test client
 		c = NewClient()
 	)
 
-	// first connect to s.
-	// this send an HTTP request to the http.Handler, and wait for the connection upgrade response.
-	// it uses the gorilla's websocket.Dial function, over a fake net.Conn struct.
-	// it runs the s's ServeHTTP function in a goroutine, so s can communicate with a
-	// c running on the current program flow
 	err := c.Connect(s, "ws://example.org/ws")
 	if err != nil {
 		t.Fatalf("Failed connecting to s: %s", err)
@@ -36,7 +28,6 @@ func TestClient(t *testing.T) {
 	for i := 0; i < count; i++ {
 		msg := fmt.Sprintf("hello, world! %d", i)
 
-		// send a message in the websocket
 		err := c.WriteMessage(websocket.TextMessage, []byte(msg))
 		if err != nil {
 			t.Fatal(err)
