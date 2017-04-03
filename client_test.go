@@ -15,10 +15,8 @@ func TestClient(t *testing.T) {
 	t.Parallel()
 	var (
 		s = &server{Upgraded: make(chan struct{})}
-		c = NewClient()
+		c = NewClient().WithLogger(t.Log)
 	)
-
-	c.SetLogger(t.Log)
 
 	err := c.Connect(s, "ws://example.org/ws")
 	if err != nil {
@@ -91,7 +89,7 @@ func TestConcurrent(t *testing.T) {
 
 	<-s.Upgraded
 
-	for _, pair := range []struct{src, dst *websocket.Conn} {{s.Conn, c.Conn}, {c.Conn, s.Conn}} {
+	for _, pair := range []struct{ src, dst *websocket.Conn }{{s.Conn, c.Conn}, {c.Conn, s.Conn}} {
 		go func() {
 			for i := 0; i < count; i++ {
 				pair.src.WriteJSON(i)
@@ -130,6 +128,36 @@ func TestConcurrent(t *testing.T) {
 	}
 }
 
+func TestBadAddress(t *testing.T) {
+	t.Parallel()
+
+	for _, url := range []string{
+		"ws://example.org/not-ws",
+		"http://example.org/ws",
+	} {
+		t.Run(url, func(t *testing.T) {
+			s := &server{Upgraded: make(chan struct{})}
+			c := NewClient()
+
+			err := c.Connect(s, url)
+			if err == nil {
+				t.Errorf("got unexpected error: %s", err)
+			}
+
+			err = c.Close()
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			err = s.Close()
+			if err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+// server for test porposes, can't handle multiple websocket connections concurrently
 type server struct {
 	*websocket.Conn
 	upgrader websocket.Upgrader
@@ -139,14 +167,23 @@ type server struct {
 func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var err error
 
-	if r.URL.Path != "/ws" {
+	switch r.URL.Path {
+	case "/ws":
+		s.Conn, err = s.upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			panic(err)
+		}
+		close(s.Upgraded)
+
+	default:
 		w.WriteHeader(http.StatusNotFound)
-		return
 	}
 
-	s.Conn, err = s.upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		panic(err)
+}
+
+func (s *server) Close() error {
+	if s.Conn == nil {
+		return nil
 	}
-	close(s.Upgraded)
+	return s.Conn.Close()
 }
