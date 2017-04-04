@@ -54,10 +54,7 @@ func (c *Client) Connect(h http.Handler, url string) error {
 	// the dialer gets the cConn which is the client side of the connection
 	dialer := &websocket.Dialer{NetDial: func(network, addr string) (net.Conn, error) { return c.cConn, nil }}
 	c.Conn, _, err = dialer.Dial(url, nil)
-	if err != nil {
-		return err
-	}
-	return nil
+	return err
 }
 
 // dialer handler reads the request sent on the connection to the server
