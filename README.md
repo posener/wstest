@@ -12,9 +12,13 @@ The [gorilla organization](http://www.gorillatoolkit.org/) provides full feature
 
 The standard library provides a `httptest.ResponseRecorder` struct that test
 an `http.Handler` without `ListenAndServe`, but is helpless when the connection is being hijacked
-by an http upgrader.
-This package provides a client to test just the `http.Handler` that uses an hijacker to hijack
-the connection and start a websocket session, without starting the server.
+by an http upgrader. As for testing websockets, it has the `httptest.NewServer` that actually
+listens on a socket on an arbitrary port.
+
+This package provides a NewDialer function to test just the `http.Handler` that uses an hijacker to hijack
+the connection and start a websocket session. It runs the handler function in a goroutine 
+without listening on any port. The returned `websocket.Dialer` then can be used to dial and communicate
+with the given handler.
 
 ## Get
 
