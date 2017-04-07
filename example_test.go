@@ -8,7 +8,7 @@ import (
 	"github.com/posener/wstest"
 )
 
-func ExampleNewClient() {
+func ExampleNewDialer() {
 	var (
 		// simple echo dialer
 		s = &echoServer{}
