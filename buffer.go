@@ -29,6 +29,8 @@ func newBuffer() *buffer {
 	}
 }
 
+var deadlineZero time.Time
+
 // Close buffer will not allow any farther reading from it
 // If any reader is waiting, it will be returned with io.EOF error
 func (b *buffer) Close() error {
@@ -96,6 +98,11 @@ func (b *buffer) SetReadDeadline(deadline time.Time) {
 	if b.cancelDeadline != nil {
 		b.cancelDeadline()
 		b.cancelDeadline = nil
+	}
+
+	// if deadline is deadlineZero, don't set a new deadline
+	if deadline == deadlineZero {
+		return
 	}
 
 	// create a new context with the desired readDeadline
