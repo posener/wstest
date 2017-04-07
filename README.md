@@ -20,6 +20,36 @@ the connection and start a websocket session, without starting the server.
 
 `go get -u github.com/posener/wstest`
 
-## Example
+## Examples
 
-See [the example](./example_test.go).
+See the [example test](./example_test.go).
+
+An example how to modify a test function from using
+`httptest.Server` to use `wstest.NewDialer` function.
+
+```diff
+func TestHandler(t *testing.T) {
+	var err error
+
+	h := &myHandler{}
+-	s := httptest.NewServer(h)
+-	defer s.Close()
+-	d := websocket.Dialer{}
++	d := wstest.NewDialer(h, nil)  // or t.Log instead of nil
+
+-	c, resp, err := d.Dial("ws://" + s.Listener.Addr().String() + "/ws", nil)
++	c, resp, err := d.Dial("ws://" + "whatever" + "/ws", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	
+	if got, want := resp.StatusCode, http.StatusSwitchingProtocols; got != want {
+		t.Errorf("resp.StatusCode = %q, want %q", got, want)
+	}
+	
+	err = c.WriteJson("test")
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+```

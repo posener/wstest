@@ -1,30 +1,30 @@
-package wstest
+package wstest_test
 
 import (
 	"fmt"
 	"net/http"
 
 	"github.com/gorilla/websocket"
+	"github.com/posener/wstest"
 )
 
 func ExampleNewClient() {
 	var (
-		// simple echo server
+		// simple echo dialer
 		s = &echoServer{}
 
-		// create a new websocket test client
-		c = NewClient()
+		// create a dialer to the dialer
+		// this send an HTTP request to the http.Handler, and wait for the connection
+		// upgrade response.
+		// it uses the gorilla's websocket.Dial function, over a fake net.Conn struct.
+		// it runs the handler's ServeHTTP function in a goroutine, so the handler can
+		// communicate with a client running on the current program flow
+		d = wstest.NewDialer(s, nil)
 
 		resp string
 	)
 
-	// first connect to the http handler.
-	// this send an HTTP request to the http.Handler, and wait for the connection
-	// upgrade response.
-	// it uses the gorilla's websocket.Dial function, over a fake net.Conn struct.
-	// it runs the handler's ServeHTTP function in a goroutine, so the handler can
-	// communicate with a client running on the current program flow
-	err := c.Connect(s, "ws://example.org/ws")
+	c, _, err := d.Dial("ws://example.org/ws", nil)
 	if err != nil {
 		panic(err)
 	}
@@ -86,5 +86,4 @@ func (s *echoServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		conn.WriteJSON(msg + "!")
 	}
-
 }

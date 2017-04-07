@@ -1,8 +1,8 @@
 package wstest
 
 import (
+	"context"
 	"io"
-	"io/ioutil"
 	"testing"
 	"time"
 )
@@ -16,7 +16,7 @@ func TestBufferWriteRead(t *testing.T) {
 	testWrite(t, b, "world!")
 	b.Close()
 
-	testRead(t, b, "hello, world!")
+	testRead(t, b, "hello, world!", nil)
 
 	testClosed(t, b)
 }
@@ -34,7 +34,7 @@ func TestReadBeforeWrite(t *testing.T) {
 
 	b := newBuffer()
 	go func() {
-		testRead(t, b, "hello, world!")
+		testRead(t, b, "hello, world!", nil)
 		close(readDone)
 	}()
 
@@ -56,13 +56,45 @@ func TestReadBeforeWrite(t *testing.T) {
 	testClosed(t, b)
 }
 
-func testRead(t *testing.T, b *buffer, want string) {
-	read, err := ioutil.ReadAll(b)
-	if err != nil {
-		t.Fatal(err)
+func TestBuffer_SetReadDeadline(t *testing.T) {
+	t.Parallel()
+	b := newBuffer()
+
+	b.SetReadDeadline(time.Now())
+	testRead(t, b, "", context.DeadlineExceeded)
+
+	b.SetReadDeadline(time.Now().Add(time.Minute))
+	testWrite(t, b, "hello")
+	testRead(t, b, "hello", nil)
+
+	// sets deadline to 0, should disable the timeout
+	b.SetReadDeadline(time.Time{})
+	testWrite(t, b, "hello")
+	testRead(t, b, "hello", nil)
+
+	b.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
+	<-time.After(100 * time.Millisecond)
+	testRead(t, b, "", context.DeadlineExceeded)
+
+	b.Close()
+	testClosed(t, b)
+}
+
+func testRead(t *testing.T, b *buffer, want string, wantErr error) {
+	data := make([]byte, 1024)
+	n, err := b.Read(data)
+
+	if err != wantErr {
+		t.Errorf("err = %s, want: %s", err, wantErr)
 	}
-	if got := string(read); got != want {
-		t.Errorf("read = %s, want: %s", got, want)
+	if wantErr == nil {
+		if got := string(data[:n]); got != want {
+			t.Errorf("read = %s, want: %s", got, want)
+		}
+	} else {
+		if want, got := 0, n; want != got {
+			t.Errorf("n = %d, want: %d", got, want)
+		}
 	}
 }
 
@@ -77,14 +109,5 @@ func testWrite(t *testing.T, b *buffer, data string) {
 }
 
 func testClosed(t *testing.T, b *buffer) {
-	data := make([]byte, 1024)
-	n, err := b.Read(data)
-
-	// after all was read, test that we get EOF
-	if want, got := 0, n; want != got {
-		t.Errorf("n = %d, want: %d", got, want)
-	}
-	if want, got := io.EOF, err; want != got {
-		t.Errorf("err = %s, want: %s", got, want)
-	}
+	testRead(t, b, "", io.EOF)
 }
