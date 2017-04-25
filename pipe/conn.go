@@ -83,12 +83,3 @@ func (c *conn) opError(op string, err error) error {
 	}
 	return &net.OpError{Op: op, Err: err, Source: c.local, Addr: c.remote, Net: "tcp"}
 }
-
-type address struct {
-	network string
-	address string
-}
-
-func (a *address) Network() string { return a.network }
-
-func (a *address) String() string { return a.address }
