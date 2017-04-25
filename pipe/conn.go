@@ -1,6 +1,7 @@
-package wstest
+package pipe
 
 import (
+	"io"
 	"net"
 	"time"
 )
@@ -12,17 +13,17 @@ type conn struct {
 	out    *buffer
 	local  net.Addr
 	remote net.Addr
-	Log    log
+	Log    Log
 }
 
-type log func(...interface{})
+type Log func(...interface{})
 
 // Read from in buffer
 func (c *conn) Read(b []byte) (n int, err error) {
 	n, err = c.in.Read(b)
 	err = c.opError("read", err)
 
-	c.log(c.name, err, "<", string(b[:n]))
+	c.log(c.name, err, "read", len(b[:n]))
 	return
 }
 
@@ -31,18 +32,24 @@ func (c *conn) Write(b []byte) (n int, err error) {
 	n, err = c.out.Write(b)
 	err = c.opError("write", err)
 
-	c.log(c.name, err, ">", string(b[:n]))
+	c.log(c.name, err, "write", len(b[:n]))
 	return
 }
 
 // Close the out buffer
 func (c *conn) Close() error {
-	return c.opError("close", c.out.Close())
+	inErr := c.in.Close()
+	err := c.out.Close()
+	if err == nil {
+		err = inErr
+	}
+	return c.opError("close", err)
 }
 
-// SetDeadLine sets the read deadline from the input buffer
+// SetDeadLine sets the read and write deadlines
 func (c *conn) SetDeadline(t time.Time) error {
 	c.in.SetReadDeadline(t)
+	c.out.SetWriteDeadline(t)
 	return nil
 }
 
@@ -52,10 +59,9 @@ func (c *conn) SetReadDeadline(t time.Time) error {
 	return nil
 }
 
-// SetWriteDeadline to a connection.
-// Write to a buffer is non blocking and will always happen, so
-// setting a deadline is meaningless.
+// SetWriteDeadline sets the write deadline to the output buffer
 func (c *conn) SetWriteDeadline(t time.Time) error {
+	c.out.SetWriteDeadline(t)
 	return nil
 }
 
@@ -63,7 +69,7 @@ func (c *conn) LocalAddr() net.Addr { return c.local }
 
 func (c *conn) RemoteAddr() net.Addr { return c.remote }
 
-// log debug messages, if Log was defined
+// log debug messages, if logger was defined
 func (c *conn) log(i ...interface{}) {
 	if c.Log != nil {
 		c.Log(i...)
@@ -72,8 +78,8 @@ func (c *conn) log(i ...interface{}) {
 
 // opError converts error to a net.OpError
 func (c *conn) opError(op string, err error) error {
-	if err == nil {
-		return nil
+	if err == nil || err == io.EOF {
+		return err
 	}
 	return &net.OpError{Op: op, Err: err, Source: c.local, Addr: c.remote, Net: "tcp"}
 }

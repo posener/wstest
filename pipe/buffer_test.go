@@ -1,4 +1,4 @@
-package wstest
+package pipe
 
 import (
 	"context"

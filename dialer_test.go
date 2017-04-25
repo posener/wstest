@@ -259,7 +259,13 @@ func TestConnectDeadline(t *testing.T) {
 				}
 			}
 
-			<-s.Upgraded
+			if tt.err == nil {
+				select {
+				case <-s.Upgraded:
+				case <-time.After(time.Second):
+					t.Fatal("connection was not upgraded after 1s")
+				}
+			}
 		})
 	}
 }
@@ -291,7 +297,7 @@ func (s *handler) connect(w http.ResponseWriter, r *http.Request) {
 	var err error
 	s.Conn, err = s.upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		panic(err)
+		return
 	}
 	close(s.Upgraded)
 }
