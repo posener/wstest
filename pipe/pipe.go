@@ -2,7 +2,7 @@ package pipe
 
 import "net"
 
-func New(debugLog Log) (net.Conn, net.Conn) {
+func New(debugLog func(...interface{})) (net.Conn, net.Conn) {
 	var (
 		s2c   = newBuffer()
 		c2s   = newBuffer()
@@ -10,8 +10,8 @@ func New(debugLog Log) (net.Conn, net.Conn) {
 		sAddr = &address{"tcp", "5.6.7.8:12346"}
 	)
 
-	client := &conn{name: "server", in: c2s, out: s2c, local: sAddr, remote: cAddr, Log: debugLog}
-	server := &conn{name: "client", in: s2c, out: c2s, local: cAddr, remote: sAddr, Log: debugLog}
+	client := &conn{name: "server", in: c2s, out: s2c, local: sAddr, remote: cAddr, logger: debugLog}
+	server := &conn{name: "client", in: s2c, out: c2s, local: cAddr, remote: sAddr, logger: debugLog}
 
 	return client, server
 }

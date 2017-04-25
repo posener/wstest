@@ -23,14 +23,11 @@ type dialer struct {
 //
 // h is the handler that should handle websocket connections.
 // debugLog is a function for a log.Println-like function for printing everything that
-// is passed over the connection.
+// is passed over the connection. Can be set to nil if no logs are needed.
 // It returns a *websocket.Dial struct, which can then be used to dial to the handler.
-func NewDialer(h http.Handler, debugLog pipe.Log) *websocket.Dialer {
-	client, server := pipe.New(debugLog)
-	conn := &dialer{
-		client: client,
-		server: server,
-	}
+func NewDialer(h http.Handler, debugLog func(...interface{})) *websocket.Dialer {
+	c1, c2 := pipe.New(debugLog)
+	conn := &dialer{client: c1, server: c2}
 
 	// run the runServer in a goroutine, so when the Dial send the request to
 	// the dialer on the connection, it will be parsed as an HTTPRequest and

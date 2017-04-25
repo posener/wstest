@@ -13,10 +13,8 @@ type conn struct {
 	out    *buffer
 	local  net.Addr
 	remote net.Addr
-	Log    Log
+	logger func(...interface{})
 }
-
-type Log func(...interface{})
 
 // Read from in buffer
 func (c *conn) Read(b []byte) (n int, err error) {
@@ -71,8 +69,8 @@ func (c *conn) RemoteAddr() net.Addr { return c.remote }
 
 // log debug messages, if logger was defined
 func (c *conn) log(i ...interface{}) {
-	if c.Log != nil {
-		c.Log(i...)
+	if c.logger != nil {
+		c.logger(i...)
 	}
 }
 
