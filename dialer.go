@@ -7,12 +7,13 @@ import (
 	"net/http/httptest"
 
 	"github.com/gorilla/websocket"
+	"github.com/posener/wstest/pipe"
 )
 
 type dialer struct {
 	httptest.ResponseRecorder
-	server *conn
-	client *conn
+	client net.Conn
+	server net.Conn
 }
 
 // NewDialer creates a wstest dialer to an http.Handler which accepts websocket upgrades.
@@ -22,20 +23,11 @@ type dialer struct {
 //
 // h is the handler that should handle websocket connections.
 // debugLog is a function for a log.Println-like function for printing everything that
-// is passed over the connection.
+// is passed over the connection. Can be set to nil if no logs are needed.
 // It returns a *websocket.Dial struct, which can then be used to dial to the handler.
-func NewDialer(h http.Handler, debugLog log) *websocket.Dialer {
-	var (
-		s2c   = newBuffer()
-		c2s   = newBuffer()
-		cAddr = &address{"tcp", "1.2.3.4:12345"}
-		sAddr = &address{"tcp", "5.6.7.8:12346"}
-	)
-
-	conn := &dialer{
-		server: &conn{name: "dialer", in: c2s, out: s2c, local: sAddr, remote: cAddr, Log: debugLog},
-		client: &conn{name: "client", in: s2c, out: c2s, local: cAddr, remote: sAddr, Log: debugLog},
-	}
+func NewDialer(h http.Handler, debugLog func(...interface{})) *websocket.Dialer {
+	c1, c2 := pipe.New(debugLog)
+	conn := &dialer{client: c1, server: c2}
 
 	// run the runServer in a goroutine, so when the Dial send the request to
 	// the dialer on the connection, it will be parsed as an HTTPRequest and
