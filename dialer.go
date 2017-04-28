@@ -47,7 +47,7 @@ func (d *dialer) runServer(h http.Handler) {
 	// and use the handler to serve this request.
 	req, err := http.ReadRequest(bufio.NewReader(d.server))
 	if err != nil {
-		panic(err)
+		return
 	}
 	h.ServeHTTP(d, req)
 }

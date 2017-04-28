@@ -18,7 +18,7 @@ func TestConn(t *testing.T) {
 		out:    b,
 		remote: remote,
 		local:  local,
-		logger: t.Log,
+		log:    t.Log,
 	}
 
 	if got, want := c.RemoteAddr(), remote; got != want {
