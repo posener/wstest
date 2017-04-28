@@ -12,7 +12,7 @@ func TestPipe(t *testing.T) {
 	t.Parallel()
 
 	nettest.TestConn(t, func() (c1, c2 net.Conn, stop func(), err error) {
-		c1, c2 = New(t.Log)
+		c1, c2 = New(nil)
 		stop = func() {
 			c1.Close()
 			c2.Close()
