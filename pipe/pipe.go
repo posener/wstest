@@ -1,4 +1,4 @@
-// pipe provides a function that creates two paired in-memory
+// Package pipe provides a function that creates two paired in-memory
 // net connections: objects that implements the `net.Conn` interface.
 //
 // The standard library `net.Pipe() (c1, c2 net.Conn)` function
