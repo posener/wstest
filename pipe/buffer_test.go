@@ -42,9 +42,7 @@ func TestReadBeforeWrite(t *testing.T) {
 	// started and is blocked until any writing is done
 	time.Sleep(time.Second)
 
-	testWrite(t, b, "hello")
-	testWrite(t, b, ", ")
-	testWrite(t, b, "world!")
+	testWrite(t, b, "hello, world!")
 	b.Close()
 
 	select {
