@@ -3,7 +3,6 @@
 // It runs the handler function in a goroutine without listening on
 // any port. The returned `websocket.Dialer` then can be used to dial
 // and communicate with the given handler.
-
 package wstest
 
 import (
