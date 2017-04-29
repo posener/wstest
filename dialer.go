@@ -1,3 +1,9 @@
+// Package wstest provides a NewDialer function to test just the
+// `http.Handler` that upgrades the connection to a websocket session.
+// It runs the handler function in a goroutine without listening on
+// any port. The returned `websocket.Dialer` then can be used to dial
+// and communicate with the given handler.
+
 package wstest
 
 import (
@@ -21,11 +27,11 @@ type dialer struct {
 // it runs the dialer's ServeHTTP function in a goroutine, so dialer can communicate with a
 // client running on the current program flow
 //
-// h is the handler that should handle websocket connections.
+// h is an http.Handler that handles websocket connections.
 // debugLog is a function for a log.Println-like function for printing everything that
 // is passed over the connection. Can be set to nil if no logs are needed.
 // It returns a *websocket.Dial struct, which can then be used to dial to the handler.
-func NewDialer(h http.Handler, debugLog func(...interface{})) *websocket.Dialer {
+func NewDialer(h http.Handler, debugLog pipe.Println) *websocket.Dialer {
 	c1, c2 := pipe.New(debugLog)
 	conn := &dialer{client: c1, server: c2}
 
