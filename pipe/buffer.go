@@ -7,13 +7,16 @@ import (
 	"time"
 )
 
-// buffer is lockable conditional buffer
+// buffer is a Reader/Writer/Closer from an in-memory bytes.Buffer that:
+// * Blocks reads until some write occur (not returning io.EOF when buffer is empty)
+// * Has read and write deadlines capabilities.
+// It uses the state struct to hold the read and write current state.
 type buffer struct {
-	buf   bytes.Buffer
-	mutex *sync.Mutex
-	cond  *sync.Cond
-	r     *state
-	w     *state
+	buf    bytes.Buffer
+	mutex  *sync.Mutex
+	cond   *sync.Cond
+	rState *state
+	wState *state
 }
 
 // returns a new buffer
@@ -23,11 +26,11 @@ func newBuffer() *buffer {
 	c := sync.NewCond(m)
 
 	b := &buffer{
-		buf:   bytes.Buffer{},
-		mutex: m,
-		cond:  c,
-		r:     newState(c.Broadcast),
-		w:     newState(nil),
+		buf:    bytes.Buffer{},
+		mutex:  m,
+		cond:   c,
+		rState: newState(c.Broadcast),
+		wState: newState(nil),
 	}
 
 	return b
@@ -40,12 +43,12 @@ func (b *buffer) Close() error {
 	defer b.mutex.Unlock()
 
 	// if there are current deadline goroutine, clean them up.
-	b.r.Cancel()
-	b.w.Cancel()
+	b.rState.CancelDeadline()
+	b.wState.CancelDeadline()
 
 	// set the error that the buffer is closed and notify waiters
-	b.r.SetError(io.EOF)
-	b.w.SetError(io.EOF)
+	b.rState.SetError(io.EOF)
+	b.wState.SetError(io.EOF)
 
 	return nil
 }
@@ -58,14 +61,14 @@ func (b *buffer) Read(d []byte) (int, error) {
 	defer b.mutex.Unlock()
 
 	for {
-		// non-blocking r from buffer, if it is empty EOF will be returned
+		// non-blocking rState from buffer, if it is empty EOF will be returned
 		n, err := b.buf.Read(d)
 		if err != io.EOF {
 			return n, err
 		}
 
 		// check for errors
-		err = b.r.Error()
+		err = b.rState.Error()
 		if err != nil {
 			return 0, err
 		}
@@ -81,14 +84,14 @@ func (b *buffer) Write(d []byte) (int, error) {
 	defer b.mutex.Unlock()
 
 	// if the write error is set, return it instead of writing.
-	err := b.w.Error()
+	err := b.wState.Error()
 	if err != nil {
 		return 0, err
 	}
 
 	n, err := b.buf.Write(d)
 
-	// signal so if there is any reader waiting, it will r the data
+	// signal so if there is any reader waiting, it will rState the data
 	b.cond.Signal()
 	return n, err
 }
@@ -100,7 +103,7 @@ func (b *buffer) SetReadDeadline(deadline time.Time) {
 	b.mutex.Lock()
 	defer b.mutex.Unlock()
 
-	b.r.Deadline(deadline)
+	b.rState.Deadline(deadline)
 }
 
 // SetWriteDeadline sets a deadline for the writer.
@@ -110,5 +113,5 @@ func (b *buffer) SetWriteDeadline(deadline time.Time) {
 	b.mutex.Lock()
 	defer b.mutex.Unlock()
 
-	b.w.Deadline(deadline)
+	b.wState.Deadline(deadline)
 }

@@ -6,7 +6,8 @@ import (
 	"time"
 )
 
-// conn is a connection for testing, implementing the net.Conn interface
+// conn is in-memory struct that implements the net.Conn interface.
+// It uses two buffer instances to read and write from.
 type conn struct {
 	name   string
 	in     *buffer

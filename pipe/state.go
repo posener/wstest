@@ -7,10 +7,10 @@ import (
 	"time"
 )
 
+// deadlineZero is used to clear the deadline of the operation
 var deadlineZero time.Time
 
-// state is a struct used for read and write operations
-// it holds the operation state
+// state is used for storing the read and write operations state
 type state struct {
 
 	// err saves the current error for the specified operation
@@ -19,14 +19,15 @@ type state struct {
 	err   error
 	errMu *sync.Mutex
 
-	// broadcast specify if to broadcast the condition for the
-	// specific operation.
-	broadcast func()
+	// errBroadcast is a cond.Broadcast function for notifying when
+	// operation has gone into error state.
+	// it can be set to nil if no broadcast is needed.
+	errBroadcast func()
 
-	// cancel is a function for cancelling a running deadline goroutine
+	// cancel is a function for cancelling a running background deadline goroutine
 	cancel context.CancelFunc
 
-	// doneCh is channel used to communicate between background goroutine
+	// doneCh is channel used to communicate between background deadline goroutine
 	// to their cancellation thread
 	doneCh chan struct{}
 
@@ -34,11 +35,12 @@ type state struct {
 	syncMu *sync.Mutex
 }
 
-func newState(broadcast func()) *state {
+// newState returns a new operation state with errBroadcast function
+func newState(errBroadcast func()) *state {
 	return &state{
-		broadcast: broadcast,
-		syncMu:    &sync.Mutex{},
-		errMu:     &sync.Mutex{},
+		errBroadcast: errBroadcast,
+		syncMu:       &sync.Mutex{},
+		errMu:        &sync.Mutex{},
 	}
 }
 
@@ -50,23 +52,41 @@ func (s *state) SetError(err error) {
 		return
 	}
 	s.err = err
-	if s.err != nil && s.broadcast != nil {
+	if s.err != nil && s.errBroadcast != nil {
 		// If error is not nil, wake up whoever waits
-		s.broadcast()
+		s.errBroadcast()
 	}
 }
 
+// Error returns operation error state
 func (s *state) Error() error {
 	s.errMu.Lock()
 	defer s.errMu.Unlock()
 	return s.err
 }
 
+// CancelDeadline cancels the background deadline goroutine if relevant
+// and wait for the background goroutine if it is running
+func (s *state) CancelDeadline() {
+	s.syncMu.Lock()
+	if s.cancel == nil {
+		s.syncMu.Unlock()
+		return
+	}
+
+	// cancel the current running background deadline goroutine
+	s.cancel()
+	s.syncMu.Unlock()
+
+	// wait for deadline operation to finish
+	<-s.doneCh
+}
+
 // Deadline sets deadline for the operation
 func (s *state) Deadline(deadline time.Time) {
 
 	// if there is a current deadline goroutine, cancel it before anything else.
-	s.Cancel()
+	s.CancelDeadline()
 
 	// if deadline is deadlineZero, don't set a new deadline
 	if deadline == deadlineZero {
@@ -86,17 +106,16 @@ func (s *state) Deadline(deadline time.Time) {
 	go s.background(ctx)
 }
 
-// Cancel cancels the background deadline goroutine if relevant
-// and wait for the background goroutine if it is running
-func (s *state) Cancel() {
+// context creates a context and updates the cancel func of the operation
+func (s *state) context(deadline time.Time) context.Context {
 	s.syncMu.Lock()
-	if s.cancel == nil {
-		s.syncMu.Unlock()
-		return
-	}
-	s.cancel()
-	s.syncMu.Unlock()
-	<-s.doneCh
+	defer s.syncMu.Unlock()
+
+	// create a new Context with the desired deadline
+	ctx, cancel := context.WithDeadline(context.Background(), deadline)
+	s.cancel = cancel
+	s.doneCh = make(chan struct{})
+	return ctx
 }
 
 // background waits for the Context to be done
@@ -117,18 +136,7 @@ func (s *state) background(ctx context.Context) {
 	}
 }
 
-// context creates a context and updates the cancel func of the operation
-func (s *state) context(deadline time.Time) context.Context {
-	s.syncMu.Lock()
-	defer s.syncMu.Unlock()
-
-	// create a new Context with the desired deadline
-	ctx, cancel := context.WithDeadline(context.Background(), deadline)
-	s.cancel = cancel
-	s.doneCh = make(chan struct{})
-	return ctx
-}
-
+// done clears the cancel and doneCh when background goroutine finishes its run
 func (s *state) done() {
 	s.syncMu.Lock()
 	defer s.syncMu.Unlock()
