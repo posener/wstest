@@ -47,26 +47,25 @@ type recorder struct {
 // runServer reads the request sent on the connection to the recorder
 // from the websocket.NewDialer.Dial function, and pass it to the recorder.
 // once this is done, the communication is done on the wsConn
-func (d *recorder) runServer(h http.Handler) {
+func (r *recorder) runServer(h http.Handler) {
 	// read from the recorder connection the request sent by the recorder.Dial,
 	// and use the handler to serve this request.
-	req, err := http.ReadRequest(bufio.NewReader(d.server))
+	req, err := http.ReadRequest(bufio.NewReader(r.server))
 	if err != nil {
 		return
 	}
-	h.ServeHTTP(d, req)
+	h.ServeHTTP(r, req)
 }
 
 // Hijack the connection
-func (d *recorder) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+func (r *recorder) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	// return to the recorder the recorder, which is the recorder side of the connection
-	rw := bufio.NewReadWriter(bufio.NewReader(d.server), bufio.NewWriter(d.server))
-	return d.server, rw, nil
+	rw := bufio.NewReadWriter(bufio.NewReader(r.server), bufio.NewWriter(r.server))
+	return r.server, rw, nil
 }
 
 // WriteHeader write HTTP header to the client and closes the connection
-func (d *recorder) WriteHeader(code int) {
-	r := http.Response{StatusCode: code}
-	r.Write(d.server)
-	d.server.Close()
+func (r *recorder) WriteHeader(code int) {
+	resp := http.Response{StatusCode: code, Header: r.Header()}
+	resp.Write(r.server)
 }
