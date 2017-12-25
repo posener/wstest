@@ -51,7 +51,7 @@ func TestHandler(t *testing.T) {
 		t.Errorf("resp.StatusCode = %q, want %q", got, want)
 	}
 	
-	err = c.WriteJson("test")
+	err = c.WriteJSON("test")
 	if err != nil {
 		t.Fatal(err)
 	}
