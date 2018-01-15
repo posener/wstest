@@ -91,6 +91,9 @@ func (b *buffer) Write(d []byte) (int, error) {
 
 	n, err := b.buf.Write(d)
 
+	// after write, cancel the deadline to prevent error
+	b.wState.CancelDeadline()
+
 	// signal so if there is any reader waiting, it will rState the data
 	b.cond.Signal()
 	return n, err
