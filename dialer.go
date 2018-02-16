@@ -12,7 +12,6 @@ import (
 	"net/http/httptest"
 
 	"github.com/gorilla/websocket"
-	"github.com/posener/wstest/pipe"
 )
 
 // NewDialer creates a wstest recorder to an http.Handler which accepts websocket upgrades.
@@ -21,11 +20,9 @@ import (
 // client running on the current program flow
 //
 // h is an http.Handler that handles websocket connections.
-// debugLog is a function for a log.Println-like function for printing everything that
-// is passed over the connection. Can be set to nil if no logs are needed.
 // It returns a *websocket.Dial struct, which can then be used to dial to the handler.
-func NewDialer(h http.Handler, debugLog pipe.Println) *websocket.Dialer {
-	client, server := pipe.New(debugLog)
+func NewDialer(h http.Handler) *websocket.Dialer {
+	client, server := net.Pipe()
 	conn := &recorder{server: server}
 
 	// run the runServer in a goroutine, so when the Dial send the request to

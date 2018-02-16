@@ -1,85 +1,68 @@
 package wstest_test
 
 import (
-	"context"
 	"fmt"
-	"net"
 	"net/http"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/gorilla/websocket"
-
 	"github.com/posener/wstest"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestClient demonstrate the usage of wstest package
 func TestClient(t *testing.T) {
 	t.Parallel()
 	var (
-		s = &handler{Upgraded: make(chan struct{})}
-		d = wstest.NewDialer(s, t.Log)
+		s    = &handler{Upgraded: make(chan struct{})}
+		d    = wstest.NewDialer(s)
+		done = make(chan struct{})
 	)
 
 	c, resp, err := d.Dial("ws://example.org/ws", nil)
-	if err != nil {
-		t.Fatalf("Failed connecting to s: %s", err)
-	}
+	require.Nil(t, err)
 
 	<-s.Upgraded
 
-	if got, want := resp.StatusCode, http.StatusSwitchingProtocols; got != want {
-		t.Errorf("resp.StatusCode = %q, want %q", got, want)
-	}
+	assert.Equal(t, http.StatusSwitchingProtocols, resp.StatusCode)
 
 	for i := 0; i < 3; i++ {
 		msg := fmt.Sprintf("hello, world! %d", i)
 
-		err := c.WriteMessage(websocket.TextMessage, []byte(msg))
-		if err != nil {
-			t.Fatal(err)
-		}
+		go func() {
+			err := c.WriteMessage(websocket.TextMessage, []byte(msg))
+			require.Nil(t, err)
+			done <- struct{}{}
+		}()
 
 		mT, m, err := s.ReadMessage()
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.Nil(t, err)
 
-		if want, got := msg, string(m); want != got {
-			t.Errorf("dialer got %q, want  %q", got, want)
-		}
-		if want, got := websocket.TextMessage, mT; want != got {
-			t.Errorf("message type = %q, want %q", got, want)
-		}
+		assert.Equal(t, msg, string(m))
+		assert.Equal(t, websocket.TextMessage, mT)
+		<-done
 
-		s.WriteMessage(websocket.TextMessage, []byte(msg))
-		if err != nil {
-			t.Fatal(err)
-		}
+		go func() {
+			err := s.WriteMessage(websocket.TextMessage, []byte(msg))
+			require.Nil(t, err)
+			done <- struct{}{}
+		}()
 
 		mT, m, err = c.ReadMessage()
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.Nil(t, err)
 
-		if want, got := msg, string(m); want != got {
-			t.Errorf("client got %q, want  %q", got, want)
-		}
-		if want, got := websocket.TextMessage, mT; want != got {
-			t.Errorf("message type = %q , want %q", got, want)
-		}
+		assert.Equal(t, msg, string(m))
+		assert.Equal(t, websocket.TextMessage, mT)
+		<-done
 	}
 
 	err = c.Close()
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.Nil(t, err)
 
 	err = s.Close()
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.Nil(t, err)
 }
 
 // TestConcurrent tests concurrent reads and writes from a connection
@@ -87,21 +70,20 @@ func TestConcurrent(t *testing.T) {
 	t.Parallel()
 	var (
 		s     = &handler{Upgraded: make(chan struct{})}
-		d     = wstest.NewDialer(s, nil)
+		d     = wstest.NewDialer(s)
 		count = 20
 	)
 
 	c, _, err := d.Dial("ws://example.org/ws", nil)
-	if err != nil {
-		t.Fatalf("Failed connecting to s: %s", err)
-	}
+	require.Nil(t, err)
 
 	<-s.Upgraded
 
 	for _, pair := range []struct{ src, dst *websocket.Conn }{{s.Conn, c}, {c, s.Conn}} {
 		go func() {
 			for i := 0; i < count; i++ {
-				pair.src.WriteJSON(i)
+				err := pair.src.WriteJSON(i)
+				require.Nil(t, err)
 			}
 		}()
 
@@ -109,32 +91,27 @@ func TestConcurrent(t *testing.T) {
 
 		for i := 0; i < count; i++ {
 			var j int
-			pair.dst.ReadJSON(&j)
+			err := pair.dst.ReadJSON(&j)
+			require.Nil(t, err)
 
 			received[j] = true
 		}
 
-		missing := []int{}
+		var missing []int
 
 		for i := range received {
 			if !received[i] {
 				missing = append(missing, i)
 			}
 		}
-		if len(missing) > 0 {
-			t.Errorf("%q -> %q: Did not received: %q", pair.src.LocalAddr(), pair.dst.LocalAddr(), missing)
-		}
+		assert.Equal(t, 0, len(missing), "%q -> %q: Did not received: %q", pair.src.LocalAddr(), pair.dst.LocalAddr(), missing)
 	}
 
 	err = c.Close()
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.Nil(t, err)
 
 	err = s.Close()
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.Nil(t, err)
 }
 
 func TestBadAddress(t *testing.T) {
@@ -157,38 +134,30 @@ func TestBadAddress(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.url, func(t *testing.T) {
 			s := &handler{Upgraded: make(chan struct{})}
-			d := wstest.NewDialer(s, nil)
+			d := wstest.NewDialer(s)
 			c, resp, err := d.Dial(tt.url, nil)
-			if c != nil {
-				t.Errorf("d = %T, want nil", c)
-			}
-			if err == nil {
-				t.Error("opError is nil")
-			}
+			assert.Nil(t, c)
+			assert.NotNil(t, err)
 			if tt.code != 0 {
-				if got, want := resp.StatusCode, tt.code; got != want {
-					t.Errorf("resp.StatusCode = %q, want %q", got, want)
-				}
+				assert.Equal(t, tt.code, resp.StatusCode)
 			}
 
 			err = s.Close()
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.Nil(t, err)
 		})
 	}
 }
+
+const deadlineExceeded = "deadline exceeded"
 
 // TestConnectDeadline tests connection deadlines
 func TestDeadlines(t *testing.T) {
 	t.Parallel()
 	h := &handler{Upgraded: make(chan struct{})}
-	d := wstest.NewDialer(h, nil)
+	d := wstest.NewDialer(h)
 
 	c, _, err := d.Dial("ws://example.org/ws", nil)
-	if err != nil {
-		t.Fatalf("Failed connecting to h: %q", err)
-	}
+	require.Nil(t, err)
 
 	<-h.Upgraded
 
@@ -198,27 +167,20 @@ func TestDeadlines(t *testing.T) {
 
 		// set the deadline to now, and test for timeout
 		pair.dst.SetReadDeadline(time.Now())
-		err = pair.dst.ReadJSON(i)
-		if got, want := err.Error(), context.DeadlineExceeded.Error(); !strings.Contains(got, want) {
-			t.Errorf("err = %q, not conains %q", got, want)
-		}
-		err = pair.dst.ReadJSON(i)
-		if got, want := err.Error(), context.DeadlineExceeded.Error(); !strings.Contains(got, want) {
-			t.Errorf("err = %q, not conains %q", got, want)
-		}
+		err = pair.dst.ReadJSON(&i)
+		assert.Contains(t, err.Error(), deadlineExceeded)
 
-		pair.src.WriteJSON(1)
-		err = pair.dst.ReadJSON(i)
-		if got, want := err.Error(), context.DeadlineExceeded.Error(); !strings.Contains(got, want) {
-			t.Errorf("err = %q, not conains %q", got, want)
-		}
+		err = pair.dst.ReadJSON(&i)
+		assert.Contains(t, err.Error(), deadlineExceeded)
+
+		go pair.src.WriteJSON(1)
+		err = pair.dst.ReadJSON(&i)
+		assert.Contains(t, err.Error(), deadlineExceeded)
 
 		// even after updating the deadline, should get an error
 		pair.dst.SetReadDeadline(time.Now().Add(time.Second))
-		err = pair.dst.ReadJSON(i)
-		if got, want := err.Error(), context.DeadlineExceeded.Error(); !strings.Contains(got, want) {
-			t.Errorf("err = %q, not conains %q", got, want)
-		}
+		err = pair.dst.ReadJSON(&i)
+		assert.Contains(t, err.Error(), deadlineExceeded)
 	}
 }
 
@@ -229,42 +191,35 @@ func TestConnectDeadline(t *testing.T) {
 	tests := []struct {
 		path    string
 		timeout time.Duration
-		err     error
+		wantErr bool
 	}{
 		{
-			"/ws/delay",
-			time.Millisecond,
-			context.DeadlineExceeded,
+			path:    "/ws/delay",
+			timeout: time.Millisecond,
+			wantErr: true,
 		},
 		{
-			"/ws",
-			time.Second,
-			nil,
+			path:    "/ws",
+			timeout: time.Second,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(fmt.Sprintf("%s/%s", tt.path, tt.timeout), func(t *testing.T) {
 			s := &handler{Upgraded: make(chan struct{})}
-			d := wstest.NewDialer(s, nil)
+			d := wstest.NewDialer(s)
 			d.HandshakeTimeout = tt.timeout
 			_, _, err := d.Dial("ws://example.org"+tt.path, nil)
-			if tt.err == nil {
-				if err != nil {
-					t.Errorf("err = %q, want nil", err)
-				}
-			} else {
-				if got, want := err.(*net.OpError).Err, tt.err; got != want {
-					t.Errorf("err = %q, want %q", got, want)
-				}
+			if tt.wantErr {
+				assert.NotNil(t, err)
+				return
 			}
 
-			if tt.err == nil {
-				select {
-				case <-s.Upgraded:
-				case <-time.After(time.Second):
-					t.Fatal("connection was not upgraded after 1s")
-				}
+			assert.Nil(t, err)
+			select {
+			case <-s.Upgraded:
+			case <-time.After(time.Second):
+				t.Fatal("connection was not upgraded after 1s")
 			}
 		})
 	}
@@ -294,12 +249,12 @@ func (s *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *handler) connect(w http.ResponseWriter, r *http.Request) {
+	defer close(s.Upgraded)
 	var err error
 	s.Conn, err = s.upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		return
 	}
-	close(s.Upgraded)
 }
 
 func (s *handler) Close() error {

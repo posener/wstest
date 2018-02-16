@@ -39,7 +39,7 @@ func TestHandler(t *testing.T) {
 -	s := httptest.NewServer(h)
 -	defer s.Close()
 -	d := websocket.Dialer{}
-+	d := wstest.NewDialer(h, nil)  // or t.Log instead of nil
++	d := wstest.NewDialer(h)
 
 -	c, resp, err := d.Dial("ws://" + s.Listener.Addr().String() + "/ws", nil)
 +	c, resp, err := d.Dial("ws://" + "whatever" + "/ws", nil)
