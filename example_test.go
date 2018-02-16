@@ -19,7 +19,7 @@ func ExampleNewDialer() {
 		// it uses the gorilla's websocket.Dial function, over a fake net.Conn struct.
 		// it runs the handler's ServeHTTP function in a goroutine, so the handler can
 		// communicate with a client running on the current program flow
-		d = wstest.NewDialer(s, nil)
+		d = wstest.NewDialer(s)
 
 		resp string
 	)
