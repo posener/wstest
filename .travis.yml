@@ -2,9 +2,6 @@ language: go
 go:
   - '1.13.x'
 
-before_install:
-  - go mod download
-
 script:
   - go test -count 20 -v -race -coverprofile=coverage.txt -covermode=atomic ./...
 
