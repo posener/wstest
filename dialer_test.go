@@ -1,6 +1,8 @@
 package wstest_test
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"testing"
@@ -148,8 +150,6 @@ func TestBadAddress(t *testing.T) {
 	}
 }
 
-const deadlineExceeded = "deadline exceeded"
-
 // TestConnectDeadline tests connection deadlines
 func TestDeadlines(t *testing.T) {
 	t.Parallel()
@@ -168,19 +168,19 @@ func TestDeadlines(t *testing.T) {
 		// set the deadline to now, and test for timeout
 		pair.dst.SetReadDeadline(time.Now())
 		err = pair.dst.ReadJSON(&i)
-		assert.Contains(t, err.Error(), deadlineExceeded)
+		assert.True(t, errors.As(err, &context.DeadlineExceeded))
 
 		err = pair.dst.ReadJSON(&i)
-		assert.Contains(t, err.Error(), deadlineExceeded)
+		assert.True(t, errors.As(err, &context.DeadlineExceeded))
 
 		go pair.src.WriteJSON(1)
 		err = pair.dst.ReadJSON(&i)
-		assert.Contains(t, err.Error(), deadlineExceeded)
+		assert.True(t, errors.As(err, &context.DeadlineExceeded))
 
 		// even after updating the deadline, should get an error
 		pair.dst.SetReadDeadline(time.Now().Add(time.Second))
 		err = pair.dst.ReadJSON(&i)
-		assert.Contains(t, err.Error(), deadlineExceeded)
+		assert.True(t, errors.As(err, &context.DeadlineExceeded))
 	}
 }
 
