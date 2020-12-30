@@ -161,26 +161,30 @@ func TestDeadlines(t *testing.T) {
 
 	<-h.Upgraded
 
-	var i int
+	assertDeadlineExceeded := func(t *testing.T, err error) {
+		v := context.DeadlineExceeded
+		assert.True(t, errors.As(err, &v))
+	}
 
+	var i int
 	for _, pair := range []struct{ src, dst *websocket.Conn }{{h.Conn, c}, {c, h.Conn}} {
 
 		// set the deadline to now, and test for timeout
 		pair.dst.SetReadDeadline(time.Now())
 		err = pair.dst.ReadJSON(&i)
-		assert.True(t, errors.As(err, &context.DeadlineExceeded))
+		assertDeadlineExceeded(t, err)
 
 		err = pair.dst.ReadJSON(&i)
-		assert.True(t, errors.As(err, &context.DeadlineExceeded))
+		assertDeadlineExceeded(t, err)
 
 		go pair.src.WriteJSON(1)
 		err = pair.dst.ReadJSON(&i)
-		assert.True(t, errors.As(err, &context.DeadlineExceeded))
+		assertDeadlineExceeded(t, err)
 
 		// even after updating the deadline, should get an error
 		pair.dst.SetReadDeadline(time.Now().Add(time.Second))
 		err = pair.dst.ReadJSON(&i)
-		assert.True(t, errors.As(err, &context.DeadlineExceeded))
+		assertDeadlineExceeded(t, err)
 	}
 }
 
