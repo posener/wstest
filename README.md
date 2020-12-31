@@ -1,59 +1,115 @@
 # wstest
 
-[![Build Status](https://travis-ci.org/posener/wstest.svg?branch=master)](https://travis-ci.org/posener/wstest)
-[![codecov](https://codecov.io/gh/posener/wstest/branch/master/graph/badge.svg)](https://codecov.io/gh/posener/wstest)
-[![GoDoc](https://godoc.org/github.com/posener/wstest?status.svg)](http://godoc.org/github.com/posener/wstest)
-[![Go Report Card](https://goreportcard.com/badge/github.com/posener/wstest)](https://goreportcard.com/report/github.com/posener/wstest)
+Package wstest provides a NewDialer function to test just the
+`http.Handler` that upgrades the connection to a websocket session.
+It runs the handler function in a goroutine without listening on
+any port. The returned `websocket.Dialer` then can be used to dial
+and communicate with the given handler.
 
-A websocket client for unit-testing a websocket server
+#### Examples
 
-The [gorilla organization](http://www.gorillatoolkit.org/) provides full featured
-[websocket implementation](https://github.com/gorilla/websocket) that the standard library lacks.
+##### NewDialer
 
-The standard library provides a `httptest.ResponseRecorder` struct that test
-an `http.Handler` without `ListenAndServe`, but is helpless when the connection is being hijacked
-by an http upgrader. As for testing websockets, it has the `httptest.NewServer` that actually
-listens on a socket on an arbitrary port.
+NewDialer creates a wstest recorder to an http.Handler which accepts websocket upgrades.
+This send an HTTP request to the http.Handler, and wait for the connection upgrade response.
+it runs the recorder's ServeHTTP function in a goroutine, so recorder can communicate with a
+client running on the current program flow
 
-This package provides a NewDialer function to test just the `http.Handler` that upgrades
-the connection to a websocket session. It runs the handler function in a goroutine
-without listening on any port. The returned `websocket.Dialer` then can be used to dial and communicate
-with the given handler.
+h is an http.Handler that handles websocket connections.
+It returns a *websocket.Dial struct, which can then be used to dial to the handler.
 
-## Get
+```golang
+package main
 
-`go get -u github.com/posener/wstest`
+import (
+	"fmt"
+	"net/http"
 
-## Examples
+	"github.com/gorilla/websocket"
+	"github.com/posener/wstest"
+)
 
-See the [example test](./example_test.go).
+func main() {
+	var (
+		// simple echo dialer
+		s = &echoServer{}
 
-An example how to modify a test function from using
-`httptest.Server` to use `wstest.NewDialer` function.
+		// create a dialer to the dialer
+		// this send an HTTP request to the http.Handler, and wait for the connection
+		// upgrade response.
+		// it uses the gorilla's websocket.Dial function, over a fake net.Conn struct.
+		// it runs the handler's ServeHTTP function in a goroutine, so the handler can
+		// communicate with a client running on the current program flow
+		d = wstest.NewDialer(s)
 
-```diff
-func TestHandler(t *testing.T) {
-	var err error
+		resp string
+	)
 
-	h := &myHandler{}
--	s := httptest.NewServer(h)
--	defer s.Close()
--	d := websocket.Dialer{}
-+	d := wstest.NewDialer(h)
-
--	c, resp, err := d.Dial("ws://" + s.Listener.Addr().String() + "/ws", nil)
-+	c, resp, err := d.Dial("ws://" + "whatever" + "/ws", nil)
+	c, _, err := d.Dial("ws://example.org/ws", nil)
 	if err != nil {
-		t.Fatal(err)
+		panic(err)
 	}
-	
-	if got, want := resp.StatusCode, http.StatusSwitchingProtocols; got != want {
-		t.Errorf("resp.StatusCode = %q, want %q", got, want)
-	}
-	
-	err = c.WriteJSON("test")
+
+	// the client is also a websocket.Conn object, so all websocket functions
+	// can be used with it. here we write a JSON string to the connection.
+	c.WriteJSON("hello echo server")
+
+	// Reading from the socket is done with the websocket.Conn functions as well.
+	c.ReadJSON(&resp)
+	fmt.Println(resp)
+
+	// Pass another message in the connection
+	c.WriteJSON("byebye")
+	c.ReadJSON(&resp)
+	fmt.Println(resp)
+
+	// Finally close the connection
+	err = c.Close()
 	if err != nil {
-		t.Fatal(err)
+		panic(err)
+	}
+
+	<-s.Done
+
+}
+
+type echoServer struct {
+	upgrader websocket.Upgrader
+	Done     chan struct{}
+}
+
+func (s *echoServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	var (
+		err error
+	)
+
+	s.Done = make(chan struct{})
+	defer close(s.Done)
+
+	if r.URL.Path != "/ws" {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	var conn *websocket.Conn
+	conn, err = s.upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		return
+	}
+
+	for {
+		var msg string
+		err := conn.ReadJSON(&msg)
+		if err != nil {
+			return
+		}
+		conn.WriteJSON(msg + "!")
 	}
 }
+
 ```
+
+
+---
+
+Created by [goreadme](https://github.com/apps/goreadme)
